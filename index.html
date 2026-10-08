@@ -1,0 +1,1287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Job Assignment Problem — Branch & Bound vs Hungarian</title>
+  <style>
+    :root{
+      --bg:#f3f6fb;
+      --panel:#ffffff;
+      --panel-alt:#eef3fb;
+      --text:#18212f;
+      --muted:#5d6b7b;
+      --border:#d9e0ec;
+      --shadow:0 10px 28px rgba(15,23,42,.08);
+      --blue:#1d6cf2;
+      --blue-soft:#dfeaff;
+      --green:#179b5c;
+      --green-soft:#dff7ea;
+      --red:#d93f4a;
+      --red-soft:#fde8ea;
+      --grey:#9aa5b1;
+      --grey-soft:#eceff3;
+      --yellow:#f4b942;
+      --yellow-soft:#fff4d6;
+      --header:#0b1730;
+      --input:#f8fafc;
+      --queue:#f7f9fc;
+    }
+
+    @media (prefers-color-scheme: dark){
+      :root{
+        --bg:#0d1320;
+        --panel:#111b2b;
+        --panel-alt:#162235;
+        --text:#edf3ff;
+        --muted:#aab7ca;
+        --border:#2a3b52;
+        --shadow:none;
+        --blue:#64a5ff;
+        --blue-soft:#1a2d4d;
+        --green:#4ed08b;
+        --green-soft:#173d2b;
+        --red:#ff6b7a;
+        --red-soft:#3b1b22;
+        --grey:#8ea2b6;
+        --grey-soft:#202d3f;
+        --yellow:#f4c96a;
+        --yellow-soft:#3e3520;
+        --header:#0a1019;
+        --input:#0f1827;
+        --queue:#0e1728;
+      }
+    }
+
+    * { box-sizing:border-box; }
+    html, body {
+      margin:0;
+      padding:0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height:100%;
+    }
+
+    body{
+      padding:18px;
+      line-height:1.4;
+    }
+
+    .app{
+      max-width:1500px;
+      margin:0 auto;
+    }
+
+    .topbar{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:16px;
+      background:var(--header);
+      color:#fff;
+      border-radius:18px;
+      padding:18px 20px;
+      box-shadow:var(--shadow);
+      margin-bottom:18px;
+    }
+
+    .title-wrap h1{
+      margin:0;
+      font-size:clamp(1.25rem, 1.6vw, 2rem);
+      letter-spacing:.01em;
+      font-weight:700;
+    }
+
+    .subtitle{
+      margin-top:4px;
+      font-size:.82rem;
+      opacity:.8;
+      font-weight:500;
+    }
+
+    .theme-toggle{
+      border:1px solid rgba(255,255,255,.22);
+      background: rgba(255,255,255,.08);
+      color:#fff;
+      border-radius:10px;
+      padding:8px 12px;
+      font-weight:600;
+      cursor:pointer;
+    }
+
+    .controls{
+      display:grid;
+      grid-template-columns: 1.2fr 1.3fr 1.3fr;
+      gap:16px;
+      margin-bottom:18px;
+    }
+
+    .card{
+      background:var(--panel);
+      border:1px solid var(--border);
+      border-radius:18px;
+      box-shadow:var(--shadow);
+      padding:16px;
+    }
+
+    .section-label{
+      font-size:.76rem;
+      color:var(--muted);
+      text-transform:uppercase;
+      letter-spacing:.12em;
+      margin:0 0 10px;
+      font-weight:700;
+    }
+
+    .cluster{
+      display:flex;
+      flex-wrap:wrap;
+      gap:10px;
+    }
+
+    button{
+      border:none;
+      border-radius:10px;
+      padding:10px 14px;
+      background:var(--panel-alt);
+      color:var(--text);
+      border:1px solid var(--border);
+      cursor:pointer;
+      font-weight:600;
+      transition:.15s ease;
+      min-height:40px;
+    }
+
+    button:hover{
+      filter:brightness(1.04);
+      transform:translateY(-1px);
+    }
+
+    button.primary{
+      background:var(--blue);
+      color:#fff;
+      border-color:var(--blue);
+    }
+
+    button.success{
+      background:var(--green);
+      color:#fff;
+      border-color:var(--green);
+    }
+
+    button.warning{
+      background:var(--yellow-soft);
+      color:var(--text);
+      border-color:var(--border);
+    }
+
+    button.active{
+      outline:2px solid var(--blue);
+      outline-offset:1px;
+      background:var(--blue-soft);
+    }
+
+    .speed-wrap{
+      display:flex;
+      align-items:center;
+      gap:12px;
+      height:100%;
+      margin-top:8px;
+    }
+
+    .speed-wrap label{
+      font-weight:700;
+      color:var(--text);
+      min-width:78px;
+    }
+
+    input[type="range"]{
+      width:100%;
+      accent-color:var(--blue);
+    }
+
+    .main-grid{
+      display:grid;
+      grid-template-columns: 1.1fr 1fr;
+      gap:18px;
+      align-items:start;
+    }
+
+    .left-col, .right-col{
+      display:grid;
+      gap:18px;
+    }
+
+    .matrix-card table{
+      width:100%;
+      border-collapse:collapse;
+      margin-top:10px;
+    }
+
+    .matrix-card td{
+      padding:6px;
+    }
+
+    .matrix-card input{
+      width:100%;
+      min-width:72px;
+      padding:10px 8px;
+      border-radius:10px;
+      border:1px solid var(--border);
+      background:var(--input);
+      color:var(--text);
+      text-align:center;
+      font-weight:700;
+      font-size:1rem;
+    }
+
+    .matrix-card input.highlight-blue{
+      background:var(--blue-soft);
+      border-color:var(--blue);
+      box-shadow:inset 0 0 0 1px var(--blue);
+    }
+
+    .matrix-card input.highlight-green{
+      background:var(--green-soft);
+      border-color:var(--green);
+      box-shadow:inset 0 0 0 1px var(--green);
+    }
+
+    .stats-grid{
+      display:grid;
+      grid-template-columns: repeat(2, minmax(120px, 1fr));
+      gap:12px;
+    }
+
+    .stat{
+      background:var(--panel-alt);
+      border:1px solid var(--border);
+      border-radius:12px;
+      padding:12px 10px;
+      display:flex;
+      flex-direction:column;
+      gap:6px;
+    }
+
+    .stat .k{
+      font-size:.72rem;
+      text-transform:uppercase;
+      color:var(--muted);
+      letter-spacing:.09em;
+      font-weight:700;
+    }
+
+    .stat .v{
+      font-size:1.05rem;
+      font-weight:800;
+      word-break:break-word;
+    }
+
+    .queue-list{
+      list-style:none;
+      padding:0;
+      margin:10px 0 0;
+      display:flex;
+      flex-direction:column;
+      gap:8px;
+    }
+
+    .queue-item{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:10px;
+      background:var(--queue);
+      border:1px solid var(--border);
+      border-radius:10px;
+      padding:8px 10px;
+      font-size:.95rem;
+    }
+
+    .queue-item .label{
+      font-weight:700;
+    }
+
+    .queue-item .bound{
+      font-weight:800;
+      color:var(--blue);
+    }
+
+    .tree-wrap{
+      overflow:auto;
+      background:linear-gradient(180deg, var(--panel), var(--panel-alt));
+      border:1px solid var(--border);
+      border-radius:14px;
+      padding:8px;
+      min-height:320px;
+    }
+
+    #treeSvg{
+      width:100%;
+      min-width:500px;
+      display:block;
+      height:360px;
+      border-radius:10px;
+    }
+
+    .legend{
+      display:flex;
+      flex-wrap:wrap;
+      gap:10px 14px;
+      margin-top:12px;
+      font-size:.9rem;
+      color:var(--muted);
+      align-items:center;
+    }
+
+    .dot{
+      display:inline-block;
+      width:12px;
+      height:12px;
+      border-radius:50%;
+      margin-right:6px;
+      vertical-align:middle;
+    }
+
+    .dot.grey{ background:var(--grey); }
+    .dot.blue{ background:var(--blue); }
+    .dot.red{ background:var(--red); }
+    .dot.green{ background:var(--green); }
+
+    .message-box{
+      background:var(--panel-alt);
+      border:1px solid var(--border);
+      border-radius:12px;
+      padding:12px 14px;
+      min-height:86px;
+      font-size:.96rem;
+      color:var(--text);
+      white-space:pre-wrap;
+    }
+
+    .log-list{
+      margin-top:12px;
+      display:flex;
+      flex-direction:column;
+      gap:8px;
+      max-height:210px;
+      overflow:auto;
+    }
+
+    .log-item{
+      background:var(--queue);
+      border:1px solid var(--border);
+      border-radius:10px;
+      padding:8px 9px;
+      font-size:.9rem;
+      color:var(--text);
+    }
+
+    .log-item.success{ border-left:4px solid var(--green); }
+    .log-item.warn{ border-left:4px solid var(--red); }
+    .log-item.info{ border-left:4px solid var(--blue); }
+
+    .comparison-grid{
+      display:grid;
+      grid-template-columns: repeat(2, minmax(120px,1fr));
+      gap:10px;
+      margin-top:8px;
+    }
+
+    .compare-box{
+      background:var(--panel-alt);
+      border:1px solid var(--border);
+      border-radius:12px;
+      padding:10px 12px;
+      display:flex;
+      flex-direction:column;
+      gap:4px;
+    }
+
+    .compare-box .label{
+      color:var(--muted);
+      text-transform:uppercase;
+      letter-spacing:.08em;
+      font-size:.68rem;
+      font-weight:700;
+    }
+
+    .compare-box .value{
+      font-size:1.1rem;
+      font-weight:800;
+    }
+
+    .ok{
+      color:var(--green);
+      font-weight:900;
+    }
+
+    .bad{
+      color:var(--red);
+      font-weight:900;
+    }
+
+    @media (max-width: 1100px){
+      .controls{ grid-template-columns:1fr; }
+      .main-grid{ grid-template-columns:1fr; }
+    }
+
+    @media (max-width: 560px){
+      body{ padding:12px; }
+      .topbar{ padding:14px 16px; }
+      .matrix-card input{ min-width:56px; }
+      .stats-grid{ grid-template-columns:1fr 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="title-wrap">
+        <h1>The Job Assignment Problem</h1>
+        <div class="subtitle">Branch & Bound vs Hungarian Algorithm</div>
+      </div>
+      <button class="theme-toggle" id="themeToggle" type="button">Toggle theme</button>
+    </header>
+
+    <section class="controls">
+      <div class="card">
+        <div class="section-label">Matrix size</div>
+        <div class="cluster" id="sizeButtons">
+          <button type="button" data-size="3" class="active">3×3</button>
+          <button type="button" data-size="4">4×4</button>
+          <button type="button" data-size="5">5×5</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="section-label">Preset matrices</div>
+        <div class="cluster" id="presetButtons">
+          <button type="button" data-preset="preset3">3×3 example</button>
+          <button type="button" data-preset="preset4">4×4 example</button>
+          <button type="button" data-preset="random">Random matrix</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="section-label">Controls</div>
+        <div class="cluster">
+          <button type="button" id="stepBtn">Step</button>
+          <button type="button" id="playPauseBtn" class="primary">Auto-play</button>
+          <button type="button" id="runToEndBtn" class="success">Run to end</button>
+          <button type="button" id="resetBtn" class="warning">Reset</button>
+        </div>
+        <div class="speed-wrap">
+          <label for="speedSlider">Speed</label>
+          <input id="speedSlider" type="range" min="100" max="2000" step="50" value="700" />
+        </div>
+      </div>
+    </section>
+
+    <div class="main-grid">
+      <div class="left-col">
+        <section class="card matrix-card">
+          <div class="section-label">Editable cost matrix</div>
+          <table>
+            <tbody id="matrixBody"></tbody>
+          </table>
+        </section>
+
+        <section class="card">
+          <div class="section-label">Statistics</div>
+          <div class="stats-grid" id="statsGrid"></div>
+        </section>
+      </div>
+
+      <div class="right-col">
+        <section class="card">
+          <div class="section-label">Priority queue (best-first)</div>
+          <ul class="queue-list" id="queueList"></ul>
+        </section>
+
+        <section class="card">
+          <div class="section-label">State-space tree</div>
+          <div class="tree-wrap">
+            <svg id="treeSvg" viewBox="0 0 760 360" preserveAspectRatio="xMidYMid meet" aria-label="State-space tree"></svg>
+          </div>
+          <div class="legend">
+            <span><span class="dot grey"></span>Queued</span>
+            <span><span class="dot blue"></span>Expanding</span>
+            <span><span class="dot red"></span>Pruned</span>
+            <span><span class="dot green"></span>Optimal</span>
+          </div>
+        </section>
+
+        <section class="card">
+          <div class="section-label">Message box</div>
+          <div id="messageBox" class="message-box" aria-live="polite"></div>
+          <div class="section-label" style="margin-top:16px; margin-bottom:8px;">Recent steps</div>
+          <div id="logList" class="log-list"></div>
+        </section>
+
+        <section class="card">
+          <div class="section-label">Final comparison</div>
+          <div class="comparison-grid" id="comparisonBox"></div>
+        </section>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const DEFAULT_MATRICES = {
+      3: [
+        [9, 2, 7],
+        [6, 4, 3],
+        [5, 8, 1]
+      ],
+      4: [
+        [9, 2, 7, 8],
+        [6, 4, 3, 7],
+        [5, 8, 1, 8],
+        [7, 6, 9, 4]
+      ],
+      5: [
+        [5, 9, 1, 8, 7],
+        [2, 6, 4, 3, 9],
+        [8, 3, 7, 5, 2],
+        [6, 1, 9, 4, 8],
+        [4, 7, 3, 2, 5]
+      ]
+    };
+
+    const state = {
+      n: 3,
+      matrix: cloneMatrix(DEFAULT_MATRICES[3]),
+      queue: [],
+      nodeMap: {},
+      treeNodes: [],
+      stepLog: [],
+      lastMessage: "Ready. Click Step to begin the Branch & Bound search.",
+      currentNodeId: null,
+      currentAssignment: {},
+      bestCost: Infinity,
+      bestAssignment: [],
+      bestNodeId: null,
+      generatedNodes: 0,
+      expandedCount: 0,
+      prunedCount: 0,
+      isSolved: false,
+      running: false,
+      speed: 700,
+      runMode: false,
+      nodeCounter: 0
+    };
+
+    const matrixBody = document.getElementById("matrixBody");
+    const queueList = document.getElementById("queueList");
+    const statsGrid = document.getElementById("statsGrid");
+    const messageBox = document.getElementById("messageBox");
+    const logList = document.getElementById("logList");
+    const comparisonBox = document.getElementById("comparisonBox");
+    const treeSvg = document.getElementById("treeSvg");
+    const speedSlider = document.getElementById("speedSlider");
+    const playPauseBtn = document.getElementById("playPauseBtn");
+    const stepBtn = document.getElementById("stepBtn");
+    const runToEndBtn = document.getElementById("runToEndBtn");
+    const resetBtn = document.getElementById("resetBtn");
+    const themeToggle = document.getElementById("themeToggle");
+
+    function cloneMatrix(mat) {
+      return mat.map(row => row.slice());
+    }
+
+    function makeMatrix(size, fillMode = "default") {
+      if (fillMode === "random") {
+        return Array.from({ length: size }, () =>
+          Array.from({ length: size }, () => Math.floor(Math.random() * 99) + 1)
+        );
+      }
+      if (DEFAULT_MATRICES[size]) {
+        return cloneMatrix(DEFAULT_MATRICES[size]);
+      }
+      return Array.from({ length: size }, () =>
+        Array.from({ length: size }, () => 1 + Math.floor(Math.random() * 99))
+      );
+    }
+
+    function factorial(n) {
+      let result = 1;
+      for (let i = 2; i <= n; i++) result *= i;
+      return result;
+    }
+
+    function fullTreeSize(n) {
+      let total = 0;
+      for (let k = 0; k <= n; k++) {
+        total += factorial(n) / factorial(n - k);
+      }
+      return total;
+    }
+
+    function clampCost(value) {
+      const n = Number(value);
+      if (!Number.isFinite(n)) return 1;
+      return Math.max(1, Math.min(99, Math.round(n)));
+    }
+
+    function assignmentMapFrom(assignments) {
+      const map = {};
+      assignments.forEach(({ worker, job }) => {
+        map[worker] = job;
+      });
+      return map;
+    }
+
+    function nodeLabel(assignments) {
+      if (!assignments.length) return "Root";
+      const last = assignments[assignments.length - 1];
+      return `W${last.worker + 1}→J${last.job + 1}`;
+    }
+
+    function setCurrentAssignment(node) {
+      if (!node) {
+        state.currentAssignment = {};
+        return;
+      }
+      state.currentAssignment = assignmentMapFrom(node.assignments || []);
+    }
+
+    function nextNodeId() {
+      state.nodeCounter += 1;
+      return `N${state.nodeCounter}`;
+    }
+
+    function createNode({ parentId = null, depth = 0, workerIndex = 0, assignments = [], freeJobs = [], costSoFar = 0, bound = 0, status = "queued" }) {
+      const node = {
+        id: nextNodeId(),
+        parentId,
+        depth,
+        workerIndex,
+        assignments: assignments.map(a => ({ ...a })),
+        freeJobs: freeJobs.slice(),
+        costSoFar,
+        bound,
+        status,
+        label: nodeLabel(assignments)
+      };
+      state.nodeMap[node.id] = node;
+      state.treeNodes.push(node);
+      return node;
+    }
+
+    function reduceMatrix(matrix) {
+      const rows = matrix.length;
+      if (!rows) return { total: 0, matrix: [] };
+      const cols = matrix[0].length;
+      const copy = matrix.map(row => row.slice());
+      let total = 0;
+
+      for (let i = 0; i < rows; i++) {
+        const minVal = Math.min(...copy[i]);
+        if (minVal > 0) {
+          for (let j = 0; j < cols; j++) {
+            copy[i][j] -= minVal;
+          }
+          total += minVal;
+        }
+      }
+
+      for (let j = 0; j < cols; j++) {
+        let minVal = Infinity;
+        for (let i = 0; i < rows; i++) {
+          if (copy[i][j] < minVal) minVal = copy[i][j];
+        }
+        if (minVal > 0) {
+          for (let i = 0; i < rows; i++) {
+            copy[i][j] -= minVal;
+          }
+          total += minVal;
+        }
+      }
+
+      return { total, matrix: copy };
+    }
+
+    function buildRoot() {
+      const root = createNode({
+        depth: 0,
+        workerIndex: 0,
+        assignments: [],
+        freeJobs: Array.from({ length: state.n }, (_, i) => i),
+        costSoFar: 0,
+        bound: 0,
+        status: "queued"
+      });
+
+      const reduced = reduceMatrix(state.matrix);
+      root.bound = reduced.total;
+      root.status = "queued";
+      state.queue = [root];
+      state.generatedNodes = 1;
+      state.expandedCount = 0;
+      state.prunedCount = 0;
+      state.isSolved = false;
+      state.currentNodeId = null;
+      state.currentAssignment = {};
+      state.bestCost = Infinity;
+      state.bestAssignment = [];
+      state.bestNodeId = null;
+      state.lastMessage = "Root node created. Lower bound is " + root.bound + ".";
+      addLog("Root created with bound " + root.bound + ".", "info");
+    }
+
+    function setMatrixSize(size) {
+      state.n = Number(size);
+      state.matrix = makeMatrix(state.n, "default");
+      state.lastMessage = "Matrix resized to " + state.n + "×" + state.n + ".";
+      resetSimulation();
+      renderUI();
+    }
+
+    function applyPreset(name) {
+      if (name === "preset3") {
+        state.n = 3;
+        state.matrix = cloneMatrix(DEFAULT_MATRICES[3]);
+      } else if (name === "preset4") {
+        state.n = 4;
+        state.matrix = cloneMatrix(DEFAULT_MATRICES[4]);
+      } else if (name === "random") {
+        state.n = state.n || 3;
+        state.matrix = makeMatrix(state.n, "random");
+      }
+      renderSizeButtons();
+      resetSimulation();
+      renderUI();
+    }
+
+    function renderSizeButtons() {
+      const buttons = document.querySelectorAll("[data-size]");
+      buttons.forEach(btn => {
+        btn.classList.toggle("active", Number(btn.dataset.size) === state.n);
+      });
+    }
+
+    function resetSimulation() {
+      state.queue = [];
+      state.nodeMap = {};
+      state.treeNodes = [];
+      state.stepLog = [];
+      state.currentNodeId = null;
+      state.currentAssignment = {};
+      state.bestCost = Infinity;
+      state.bestAssignment = [];
+      state.bestNodeId = null;
+      state.isSolved = false;
+      state.running = false;
+      state.runMode = false;
+      state.nodeCounter = 0;
+      state.generatedNodes = 0;
+      state.expandedCount = 0;
+      state.prunedCount = 0;
+      state.stepLog = [];
+      buildRoot();
+      updatePlayPauseButton();
+      renderUI();
+    }
+
+    function popBestNode() {
+      state.queue.sort((a, b) => a.bound - b.bound || b.depth - a.depth);
+      const node = state.queue.shift();
+      if (node) {
+        state.currentNodeId = node.id;
+        setCurrentAssignment(node);
+      }
+      return node;
+    }
+
+    function addLog(text, type = "info") {
+      state.stepLog.unshift({ text, type });
+      if (state.stepLog.length > 8) state.stepLog.length = 8;
+    }
+
+    function updatePlayPauseButton() {
+      playPauseBtn.textContent = state.running ? "Pause" : "Auto-play";
+      playPauseBtn.classList.toggle("primary", !state.running);
+    }
+
+    function getHungarianSolution(matrix) {
+      const n = matrix.length;
+      const cost = matrix.map(row => row.slice());
+      const u = new Array(n + 1).fill(0);
+      const v = new Array(n + 1).fill(0);
+      const p = new Array(n + 1).fill(0);
+      const way = new Array(n + 1).fill(0);
+
+      for (let i = 1; i <= n; i++) {
+        p[0] = i;
+        let j0 = 0;
+        const minv = new Array(n + 1).fill(Number.POSITIVE_INFINITY);
+        const used = new Array(n + 1).fill(false);
+
+        while (true) {
+          used[j0] = true;
+          const i0 = p[j0];
+          let delta = Number.POSITIVE_INFINITY;
+          let j1 = 0;
+
+          for (let j = 1; j <= n; j++) {
+            if (!used[j]) {
+              const cur = cost[i0 - 1][j - 1] - u[i0] - v[j];
+              if (cur < minv[j]) {
+                minv[j] = cur;
+                way[j] = j0;
+              }
+              if (minv[j] < delta) {
+                delta = minv[j];
+                j1 = j;
+              }
+            }
+          }
+
+          for (let j = 0; j <= n; j++) {
+            if (used[j]) {
+              u[p[j]] += delta;
+              v[j] -= delta;
+            } else {
+              minv[j] -= delta;
+            }
+          }
+
+          j0 = j1;
+          if (p[j0] === 0) break;
+        }
+
+        while (true) {
+          const j1 = way[j0];
+          p[j0] = p[j1];
+          j0 = j1;
+          if (j0 === 0) break;
+        }
+      }
+
+      const assignment = Array(n).fill(0);
+      for (let j = 1; j <= n; j++) {
+        assignment[p[j] - 1] = j - 1;
+      }
+
+      let total = 0;
+      for (let i = 0; i < n; i++) {
+        total += matrix[i][assignment[i]];
+      }
+
+      return { assignment, cost: total };
+    }
+
+    function performStep() {
+      if (state.isSolved) {
+        state.running = false;
+        updatePlayPauseButton();
+        return;
+      }
+
+      if (!state.queue.length) {
+        state.lastMessage = "Queue is empty. No further nodes remain to expand.";
+        addLog("Queue emptied; no feasible completion remains.", "warn");
+        renderUI();
+        return;
+      }
+
+      const node = popBestNode();
+      if (!node) return;
+
+      const currentBest = state.bestCost === Infinity ? "No best cost yet" : "Current best cost = " + state.bestCost;
+
+      if (state.bestCost !== Infinity && node.bound >= state.bestCost) {
+        node.status = "pruned";
+        state.prunedCount += 1;
+        state.lastMessage = `Pruned node ${node.label} because its lower bound ${node.bound} is not better than the best known cost ${state.bestCost}.`;
+        addLog(`Pruned ${node.label} (bound ${node.bound} >= best ${state.bestCost}).`, "warn");
+        renderUI();
+        return;
+      }
+
+      if (node.depth === state.n) {
+        state.bestCost = node.costSoFar;
+        state.bestAssignment = node.assignments.map(a => ({ ...a }));
+        state.bestNodeId = node.id;
+        state.isSolved = true;
+        state.running = false;
+        state.runMode = false;
+        node.status = "optimal";
+        state.currentAssignment = assignmentMapFrom(state.bestAssignment);
+        state.lastMessage = `Optimal assignment found: ${formatAssignment(state.bestAssignment)} with total cost ${state.bestCost}.`;
+        addLog(`Optimal found: ${formatAssignment(state.bestAssignment)} => ${state.bestCost}.`, "success");
+        queueList.innerHTML = "";
+        state.queue = [];
+        updatePlayPauseButton();
+        renderUI();
+        return;
+      }
+
+      node.status = "expanded";
+      state.expandedCount += 1;
+      const childrenCreated = [];
+      const childAssignments = [];
+
+      for (const jobIndex of node.freeJobs) {
+        const workerIndex = node.workerIndex;
+        const assignments = node.assignments.concat([{ worker: workerIndex, job: jobIndex }]);
+        const remainingJobs = node.freeJobs.filter(j => j !== jobIndex);
+        const subRows = [];
+        for (let r = workerIndex + 1; r < state.n; r++) {
+          subRows.push(r);
+        }
+        const subMatrix = subRows.map(row => remainingJobs.map(col => state.matrix[row][col]));
+        const reduction = reduceMatrix(subMatrix);
+
+        const childCostSoFar = node.costSoFar + state.matrix[workerIndex][jobIndex];
+        const childBound = childCostSoFar + reduction.total;
+
+        const child = createNode({
+          parentId: node.id,
+          depth: node.depth + 1,
+          workerIndex: workerIndex + 1,
+          assignments,
+          freeJobs: remainingJobs,
+          costSoFar: childCostSoFar,
+          bound: childBound,
+          status: "queued"
+        });
+
+        state.generatedNodes += 1;
+
+        if (child.bound >= state.bestCost && state.bestCost !== Infinity) {
+          child.status = "pruned";
+          state.prunedCount += 1;
+          addLog(`Child ${child.label} pruned (bound ${child.bound} >= best ${state.bestCost}).`, "warn");
+        } else {
+          state.queue.push(child);
+          childAssignments.push(child);
+          childrenCreated.push(child);
+          child.status = "queued";
+        }
+      }
+
+      state.lastMessage = `Expanded ${node.label}. ${childrenCreated.length} child nodes queued; ${state.queue.length} remain. ${currentBest}.`;
+      addLog(`Expanded ${node.label}; queued ${childrenCreated.length} children.`, "info");
+      setCurrentAssignment(node);
+      renderUI();
+    }
+
+    function formatAssignment(assignments) {
+      if (!assignments.length) return "[]";
+      return assignments.map(a => `W${a.worker + 1}->J${a.job + 1}`).join(", ");
+    }
+
+    function renderMatrix() {
+      const assignmentMap = state.currentAssignment;
+      const bestMap = state.bestAssignment.length ? assignmentMapFrom(state.bestAssignment) : {};
+      matrixBody.innerHTML = "";
+
+      for (let i = 0; i < state.n; i++) {
+        const row = document.createElement("tr");
+        for (let j = 0; j < state.n; j++) {
+          const cell = document.createElement("td");
+          const input = document.createElement("input");
+          input.type = "number";
+          input.min = 1;
+          input.max = 99;
+          input.value = state.matrix[i][j];
+          input.dataset.row = i;
+          input.dataset.col = j;
+
+          if (assignmentMap[i] === j) {
+            input.classList.add("highlight-blue");
+          }
+          if (bestMap[i] === j && state.bestAssignment.length) {
+            input.classList.add("highlight-green");
+          }
+
+          input.addEventListener("change", (event) => {
+            const rowIndex = Number(event.target.dataset.row);
+            const colIndex = Number(event.target.dataset.col);
+            const value = clampCost(event.target.value);
+            state.matrix[rowIndex][colIndex] = value;
+            event.target.value = value;
+            resetSimulation();
+            renderUI();
+          });
+
+          cell.appendChild(input);
+          row.appendChild(cell);
+        }
+        matrixBody.appendChild(row);
+      }
+    }
+
+    function renderQueue() {
+      const sorted = [...state.queue].sort((a, b) => a.bound - b.bound || b.depth - a.depth);
+      const top = sorted.slice(0, 8);
+
+      if (!top.length) {
+        queueList.innerHTML = "<li class='queue-item'><span class='label'>Queue empty</span><span class='bound'>—</span></li>";
+        return;
+      }
+
+      queueList.innerHTML = top.map(node => {
+        return `
+          <li class="queue-item">
+            <span class="label">${node.label}</span>
+            <span class="bound">b=${node.bound}</span>
+          </li>
+        `;
+      }).join("");
+    }
+
+    function renderStats() {
+      const hungarian = getHungarianSolution(state.matrix);
+      const fullTree = fullTreeSize(state.n);
+      const factorialN = factorial(state.n);
+      const avoided = (fullTree - state.generatedNodes) / fullTree * 100;
+
+      const currentBest = state.bestCost === Infinity ? "—" : state.bestCost;
+      const successState = state.bestCost !== Infinity && Math.abs(state.bestCost - hungarian.cost) < 1e-9;
+
+      statsGrid.innerHTML = `
+        <div class="stat">
+          <span class="k">Best cost</span>
+          <span class="v">${currentBest}</span>
+        </div>
+        <div class="stat">
+          <span class="k">Generated</span>
+          <span class="v">${state.generatedNodes}</span>
+        </div>
+        <div class="stat">
+          <span class="k">Expanded</span>
+          <span class="v">${state.expandedCount}</span>
+        </div>
+        <div class="stat">
+          <span class="k">Pruned</span>
+          <span class="v">${state.prunedCount}</span>
+        </div>
+        <div class="stat">
+          <span class="k">Full tree size</span>
+          <span class="v">${fullTree}</span>
+        </div>
+        <div class="stat">
+          <span class="k">n!</span>
+          <span class="v">${factorialN}</span>
+        </div>
+      `;
+    }
+
+    function renderTree() {
+      const nodes = [...state.treeNodes];
+      if (!nodes.length) {
+        treeSvg.innerHTML = "";
+        return;
+      }
+
+      const width = 760;
+      const height = 360;
+      const maxDepth = Math.max(...nodes.map(n => n.depth), 0);
+
+      const depthMap = new Map();
+      for (const node of nodes) {
+        if (!depthMap.has(node.depth)) depthMap.set(node.depth, []);
+        depthMap.get(node.depth).push(node);
+      }
+
+      const parents = new Map();
+      for (const node of nodes) {
+        if (node.parentId && state.nodeMap[node.parentId]) {
+          parents.set(node.id, state.nodeMap[node.parentId]);
+        }
+      }
+
+      nodes.forEach(node => {
+        const siblings = depthMap.get(node.depth) || [];
+        const xIndex = siblings.indexOf(node);
+        const x = 60 + (siblings.length === 1 ? 0.5 : xIndex / Math.max(1, siblings.length - 1)) * (width - 120);
+        node._x = x;
+        node._y = 40 + node.depth * 75;
+      });
+
+      let drawing = `
+        <defs>
+          <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+            <feDropShadow dx="0" dy="2" stdDeviation="2" flood-color="rgba(0,0,0,0.18)" />
+          </filter>
+        </defs>
+      `;
+
+      for (const node of nodes) {
+        if (node.parentId && state.nodeMap[node.parentId]) {
+          const parent = state.nodeMap[node.parentId];
+          drawing += `
+            <line x1="${parent._x}" y1="${parent._y + 18}" x2="${node._x}" y2="${node._y - 18}" stroke="rgba(130,145,170,.8)" stroke-width="2" />
+          `;
+        }
+      }
+
+      const colorByStatus = {
+        queued: "#9aa5b1",
+        expanded: "#1d6cf2",
+        pruned: "#d93f4a",
+        optimal: "#179b5c"
+      };
+
+      for (const node of nodes) {
+        const fill = colorByStatus[node.status] || "#9aa5b1";
+        drawing += `
+          <g filter="url(#shadow)">
+            <circle cx="${node._x}" cy="${node._y}" r="18" fill="${fill}" />
+            <text x="${node._x}" y="${node._y + 4}" text-anchor="middle" font-size="10" fill="#fff" font-weight="800">${node.label.length > 6 ? "..." : node.label}</text>
+            <text x="${node._x}" y="${node._y + 28}" text-anchor="middle" font-size="9" fill="var(--text)" font-weight="700">b=${node.bound}</text>
+          </g>
+        `;
+      }
+
+      treeSvg.innerHTML = drawing;
+    }
+
+    function renderLog() {
+      messageBox.textContent = state.lastMessage || "Ready.";
+      logList.innerHTML = (state.stepLog || []).map(item => `
+        <div class="log-item ${item.type || "info"}">${item.text}</div>
+      `).join("");
+    }
+
+    function renderComparison() {
+      const hungarian = getHungarianSolution(state.matrix);
+      const fullTree = fullTreeSize(state.n);
+      const factorialN = factorial(state.n);
+      const currentBest = state.bestCost === Infinity ? "—" : state.bestCost;
+      const match = state.bestCost !== Infinity && Math.abs(state.bestCost - hungarian.cost) < 1e-9;
+      const avoided = state.generatedNodes ? ((fullTree - state.generatedNodes) / fullTree) * 100 : 0;
+
+      comparisonBox.innerHTML = `
+        <div class="compare-box">
+          <div class="label">B&B cost</div>
+          <div class="value">${currentBest}</div>
+        </div>
+        <div class="compare-box">
+          <div class="label">Hungarian cost</div>
+          <div class="value">${hungarian.cost}</div>
+        </div>
+        <div class="compare-box">
+          <div class="label">Match</div>
+          <div class="value ${match ? "ok" : "bad"}">${match ? "✓" : "✗"}</div>
+        </div>
+        <div class="compare-box">
+          <div class="label">Tree avoided</div>
+          <div class="value">${avoided.toFixed(1)}%</div>
+        </div>
+        <div class="compare-box">
+          <div class="label">Exhaustive size</div>
+          <div class="value">${factorialN}</div>
+        </div>
+        <div class="compare-box">
+          <div class="label">Best assignment</div>
+          <div class="value">${state.bestAssignment.length ? formatAssignment(state.bestAssignment) : "—"}</div>
+        </div>
+      `;
+    }
+
+    function renderUI() {
+      renderMatrix();
+      renderQueue();
+      renderStats();
+      renderTree();
+      renderLog();
+      renderComparison();
+    }
+
+    function toggleTheme() {
+      const root = document.documentElement;
+      const current = getComputedStyle(root).getPropertyValue("--bg");
+      if (current.trim() === "#0d1320") {
+        root.style.colorScheme = "light";
+      } else {
+        root.style.colorScheme = "dark";
+      }
+      document.body.style.setProperty("color-scheme", getComputedStyle(root).getPropertyValue("color-scheme"));
+    }
+
+    function startAutoPlay() {
+      if (state.isSolved) return;
+      state.running = !state.running;
+      updatePlayPauseButton();
+      if (state.running) {
+        const tick = () => {
+          if (!state.running) return;
+          performStep();
+          if (!state.isSolved && state.queue.length > 0) {
+            setTimeout(tick, state.speed);
+          } else {
+            state.running = false;
+            updatePlayPauseButton();
+          }
+        };
+        setTimeout(tick, state.speed);
+      }
+    }
+
+    function runToEndMode() {
+      if (state.isSolved) return;
+      state.running = true;
+      updatePlayPauseButton();
+      const tick = () => {
+        if (!state.running) return;
+        performStep();
+        if (!state.isSolved && state.queue.length > 0) {
+          setTimeout(tick, 30);
+        } else {
+          state.running = false;
+          updatePlayPauseButton();
+        }
+      };
+      setTimeout(tick, 30);
+    }
+
+    document.getElementById("sizeButtons").addEventListener("click", (event) => {
+      const target = event.target.closest("[data-size]");
+      if (!target) return;
+      setMatrixSize(target.dataset.size);
+    });
+
+    document.getElementById("presetButtons").addEventListener("click", (event) => {
+      const target = event.target.closest("[data-preset]");
+      if (!target) return;
+      applyPreset(target.dataset.preset);
+    });
+
+    stepBtn.addEventListener("click", () => {
+      if (state.running) {
+        state.running = false;
+        updatePlayPauseButton();
+      }
+      performStep();
+    });
+
+    playPauseBtn.addEventListener("click", () => {
+      startAutoPlay();
+    });
+
+    runToEndBtn.addEventListener("click", () => {
+      runToEndMode();
+    });
+
+    resetBtn.addEventListener("click", () => {
+      resetSimulation();
+    });
+
+    speedSlider.addEventListener("input", (event) => {
+      state.speed = Number(event.target.value);
+    });
+
+    themeToggle.addEventListener("click", toggleTheme);
+
+    document.addEventListener("DOMContentLoaded", () => {
+      renderSizeButtons();
+      resetSimulation();
+    });
+  </script>
+</body>
+</html>
